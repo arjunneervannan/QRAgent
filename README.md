@@ -1,26 +1,152 @@
-# QRAgent
+# Qwen2.5-VL-7B-Instruct Factor Agent
 
-A QR code agent application.
+A basic implementation of a factor evaluation agent using Qwen2.5-VL-7B-Instruct for the QRAgent_Env environment. This agent can observe market data, propose factor strategies, and evaluate their performance without reinforcement learning.
 
-## Getting Started
+## Overview
 
-This project is currently in development.
+This implementation provides:
+- A simple Qwen2.5-VL-7B-Instruct agent that can interact with the QRAgent_Env
+- Basic action generation based on observations
+- Factor strategy evaluation using the Factor DSL
+- Hugging Face Jobs compatibility for cloud evaluation
 
-## Features
+## Files
 
-- Coming soon...
+- `qwen_agent.py` - Main agent implementation and local evaluation script
+- `hf_job_config.py` - Hugging Face Jobs configuration for cloud evaluation
+- `test_agent.py` - Simple test script to verify functionality
+- `requirements.txt` - Python dependencies
+- `README.md` - This file
 
 ## Installation
 
-Instructions will be added as the project develops.
+1. Clone the QRAgent_Env repository:
+```bash
+git clone https://github.com/arjunneervannan/QRAgent_Env.git
+```
 
-## Contributing
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+3. Ensure you have the QRAgent_Env data files in place (ff25_value_weighted.csv)
+
+## Usage
+
+### Local Evaluation
+
+Run the agent locally:
+
+```bash
+python qwen_agent.py
+```
+
+### Test Script
+
+Run a quick test:
+
+```bash
+python test_agent.py
+```
+
+### Hugging Face Jobs
+
+To run on Hugging Face Jobs, submit `hf_job_config.py` as a job with the following configuration:
+
+- **Model**: Qwen/Qwen2.5-VL-7B-Instruct
+- **Hardware**: GPU (recommended A100 or similar for 7B model)
+- **Instance type**: GPU instance with sufficient memory
+- **Timeout**: 30-60 minutes
+
+## How It Works
+
+### Agent Architecture
+
+The agent uses Qwen2.5-VL-7B-Instruct to generate actions based on environment observations:
+
+1. **Observation Processing**: Formats the current state into a text prompt
+2. **Action Generation**: Uses the language model to generate JSON actions
+3. **Action Validation**: Ensures generated actions are valid
+4. **Fallback Handling**: Uses simple fallback actions if generation fails
+
+### Action Types
+
+The agent can perform three types of actions:
+
+1. **OBSERVE**: Analyze data using built-in tools
+   - `describe_data`: Get data statistics
+   - `plot_returns`: Generate return distribution plots
+   - `analyze_factor_performance`: Analyze factor performance
+
+2. **FACTOR_IMPROVE**: Propose new factor strategies using the Factor DSL
+
+3. **STOP**: End the episode and trigger final evaluation
+
+### Factor DSL
+
+The agent generates factor strategies using a JSON-based Domain Specific Language with operations like:
+- `rolling_return`: Calculate rolling returns
+- `ema`: Exponential moving average
+- `zscore_xs`: Cross-sectional z-scores
+- `winsor_quantile`: Winsorize data
+- `add`, `sub`, `mul`: Arithmetic operations
+- `combine`: Combine multiple signals
+
+## Example Factor Strategy
+
+```json
+{
+  "nodes": [
+    {"id": "x0", "op": "rolling_return", "n": 126},
+    {"id": "x1", "op": "rolling_return", "n": 21},
+    {"id": "x2", "op": "sub", "a": "x0", "b": "x1"},
+    {"id": "x3", "op": "winsor_quantile", "src": "x2", "q": 0.02},
+    {"id": "score", "op": "zscore_xs", "src": "x3"}
+  ],
+  "output": "score"
+}
+```
+
+## Performance Metrics
+
+The agent is evaluated on:
+- **Sharpe Ratio**: Risk-adjusted returns
+- **Turnover**: Portfolio rebalancing frequency
+- **Information Ratio**: Active return vs tracking error
+- **Maximum Drawdown**: Largest peak-to-trough decline
+
+## Limitations
+
+This is a basic implementation without:
+- Reinforcement learning
+- Memory or state tracking across episodes
+- Advanced prompt engineering
+- Fine-tuning on factor data
+- Sophisticated action selection strategies
+
+## Future Improvements
+
+Potential enhancements:
+1. Add memory/context tracking
+2. Implement more sophisticated prompt engineering
+3. Add few-shot examples of good factor strategies
+4. Implement action validation and correction
+5. Add performance-based action selection
+6. Fine-tune the model on factor data
+
+## Troubleshooting
+
+### Common Issues
+
+1. **CUDA Out of Memory**: Use a smaller model or reduce batch size
+2. **JSON Parsing Errors**: The agent has fallback mechanisms for invalid JSON
+3. **Environment Errors**: Ensure QRAgent_Env is properly installed and data files are present
+
+### Debug Mode
+
+Enable debug output by modifying the agent to print more detailed information about the generation process.
 
 ## License
 
-This project is licensed under the MIT License.
+This project uses the QRAgent_Env library (MIT License) and Qwen2.5-VL-7B-Instruct model.
