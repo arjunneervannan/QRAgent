@@ -1,22 +1,23 @@
 # Qwen2.5-VL-7B-Instruct Factor Agent
 
-A basic implementation of a factor evaluation agent using Qwen2.5-VL-7B-Instruct for the QRAgent_Env environment. This agent can observe market data, propose factor strategies, and evaluate their performance without reinforcement learning.
+A clean implementation of a factor evaluation agent using Qwen2.5-VL-7B-Instruct for the QRAgent_Env environment. This agent can observe market data, propose factor strategies, and evaluate their performance through an interactive environment.
 
 ## Overview
 
 This implementation provides:
-- A simple Qwen2.5-VL-7B-Instruct agent that can interact with the QRAgent_Env
+- A clean Qwen2.5-VL-7B-Instruct agent wrapper that can interact with the QRAgent_Env
 - Basic action generation based on observations
 - Factor strategy evaluation using the Factor DSL
-- Hugging Face Jobs compatibility for cloud evaluation
+- Simple evaluation loop for testing and development
 
 ## Files
 
-- `qwen_agent.py` - Main agent implementation and local evaluation script
-- `hf_job_config.py` - Hugging Face Jobs configuration for cloud evaluation
-- `test_agent.py` - Simple test script to verify functionality
+- `agent_wrapper.py` - Clean wrapper for the Qwen agent with helper methods
+- `evaluation_loop.py` - Basic evaluation loop for running episodes
+- `example_usage.py` - Example script demonstrating usage
 - `requirements.txt` - Python dependencies
 - `README.md` - This file
+- `QRAgent_Env/` - The core reinforcement learning environment (unchanged)
 
 ## Installation
 
@@ -34,30 +35,40 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Local Evaluation
+### Basic Evaluation
 
-Run the agent locally:
-
-```bash
-python qwen_agent.py
-```
-
-### Test Script
-
-Run a quick test:
+Run the evaluation loop:
 
 ```bash
-python test_agent.py
+python evaluation_loop.py
 ```
 
-### Hugging Face Jobs
+### Using the Agent Wrapper
 
-To run on Hugging Face Jobs, submit `hf_job_config.py` as a job with the following configuration:
+```python
+from agent_wrapper import QwenFactorAgentWrapper
+from evaluation_loop import FactorEvaluationLoop
 
-- **Model**: Qwen/Qwen2.5-VL-7B-Instruct
-- **Hardware**: GPU (recommended A100 or similar for 7B model)
-- **Instance type**: GPU instance with sufficient memory
-- **Timeout**: 30-60 minutes
+# Initialize agent
+agent = QwenFactorAgentWrapper()
+
+# Initialize evaluation loop
+eval_loop = FactorEvaluationLoop()
+
+# Run a single episode
+episode_data = eval_loop.run_episode(agent)
+
+# Run multiple episodes
+all_episodes = eval_loop.run_multiple_episodes(agent, num_episodes=3)
+```
+
+### Example Usage
+
+Run the example script to see the agent in action:
+
+```bash
+python example_usage.py
+```
 
 ## How It Works
 

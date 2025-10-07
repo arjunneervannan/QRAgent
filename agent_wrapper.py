@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Hugging Face Jobs configuration for Qwen2.5-VL-7B-Instruct factor evaluation.
-This script can be submitted as a Hugging Face job.
+Clean wrapper for the Qwen2.5-VL-7B-Instruct Factor Agent.
+This file provides a simplified interface to the Qwen agent without modifying QRAgent_Env.
 """
 
-import os
 import json
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, Any, List, Optional
 import sys
+import os
 
 # Add QRAgent_Env to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'QRAgent_Env'))
@@ -18,8 +18,11 @@ from envs.factor_env import FactorImproveEnv
 from factors.validate import validate_program
 
 
-class QwenFactorAgent:
-    """Basic Qwen2.5-VL-7B-Instruct agent for factor evaluation."""
+class QwenFactorAgentWrapper:
+    """
+    Clean wrapper for the Qwen2.5-VL-7B-Instruct factor evaluation agent.
+    Provides a simplified interface for factor strategy development.
+    """
     
     def __init__(self, model_name: str = "Qwen/Qwen2.5-VL-7B-Instruct", device: str = "auto"):
         """Initialize the agent with the Qwen model."""
@@ -190,129 +193,42 @@ Always respond with valid JSON only, no additional text."""
         else:
             return False
 
+    def create_simple_momentum_factor(self, lookback_days: int = 63) -> Dict[str, Any]:
+        """Create a simple momentum factor program."""
+        return {
+            "nodes": [
+                {"id": "x0", "op": "rolling_return", "n": lookback_days},
+                {"id": "score", "op": "zscore_xs", "src": "x0"}
+            ],
+            "output": "score"
+        }
 
-def run_evaluation_episode(env: FactorImproveEnv, agent: QwenFactorAgent, max_steps: int = 10) -> Dict[str, Any]:
-    """Run a single evaluation episode."""
-    print("Starting evaluation episode...")
-    
-    # Reset environment
-    obs, info = env.reset()
-    print(f"Initial observation: Budget={obs['budget_left']}")
-    
-    episode_data = {
-        "actions": [],
-        "rewards": [],
-        "observations": [obs],
-        "total_reward": 0.0,
-        "steps_taken": 0
-    }
-    
-    for step in range(max_steps):
-        print(f"\n--- Step {step + 1} ---")
-        
-        # Get action from agent
-        action = agent.get_action(obs)
-        print(f"Agent action: {action}")
-        
-        # Validate action
-        if not agent.validate_action(action):
-            print("Warning: Invalid action generated, using fallback")
-            action = {"type": "OBSERVE", "tool": "describe_data"}
-        
-        # Take step in environment
-        obs, reward, terminated, truncated, info = env.step(action)
-        
-        print(f"Reward: {reward:.3f}, Budget: {obs['budget_left']}")
-        print(f"Terminated: {terminated}, Truncated: {truncated}")
-        
-        # Store episode data
-        episode_data["actions"].append(action)
-        episode_data["rewards"].append(reward)
-        episode_data["observations"].append(obs)
-        episode_data["total_reward"] += reward
-        episode_data["steps_taken"] += 1
-        
-        # Check if episode is done
-        if terminated or truncated:
-            print(f"Episode ended. Total reward: {episode_data['total_reward']:.3f}")
-            break
-    
-    return episode_data
+    def create_enhanced_momentum_factor(self, long_term: int = 126, short_term: int = 21) -> Dict[str, Any]:
+        """Create an enhanced momentum factor with multiple timeframes."""
+        return {
+            "nodes": [
+                {"id": "x0", "op": "rolling_return", "n": long_term},
+                {"id": "x1", "op": "rolling_return", "n": short_term},
+                {"id": "x2", "op": "sub", "a": "x0", "b": "x1"},
+                {"id": "x3", "op": "winsor_quantile", "src": "x2", "q": 0.02},
+                {"id": "score", "op": "zscore_xs", "src": "x3"}
+            ],
+            "output": "score"
+        }
 
-
-def main():
-    """Main evaluation function for Hugging Face Jobs."""
-    print("Qwen2.5-VL-7B-Instruct Factor Agent Evaluation (HF Jobs)")
-    print("=" * 60)
-    
-    # Log environment info
-    print(f"PyTorch version: {torch.__version__}")
-    print(f"CUDA available: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
-        print(f"CUDA device: {torch.cuda.get_device_name()}")
-        print(f"CUDA memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-    
-    # Initialize environment
-    print("\nInitializing environment...")
-    try:
-        env = FactorImproveEnv(
-            data_path="QRAgent_Env/data/ff25_value_weighted.csv",
-            test_train_split=0.8,
-            timesteps=10,
-            baseline_path="QRAgent_Env/factors/baseline.json",
-            plot_path="hf_job_plots"
-        )
-        print("Environment initialized successfully")
-    except Exception as e:
-        print(f"Error initializing environment: {e}")
-        return
-    
-    # Initialize agent
-    print("\nInitializing Qwen agent...")
-    try:
-        agent = QwenFactorAgent()
-        print("Agent initialized successfully")
-    except Exception as e:
-        print(f"Error initializing agent: {e}")
-        return
-    
-    # Run evaluation
-    print("\nRunning evaluation episode...")
-    try:
-        episode_data = run_evaluation_episode(env, agent, max_steps=10)
-        
-        # Print results
-        print("\n" + "=" * 60)
-        print("EVALUATION RESULTS")
-        print("=" * 60)
-        print(f"Total reward: {episode_data['total_reward']:.3f}")
-        print(f"Steps taken: {episode_data['steps_taken']}")
-        print(f"Average reward per step: {episode_data['total_reward'] / episode_data['steps_taken']:.3f}")
-        
-        # Print final performance if available
-        final_obs = episode_data["observations"][-1]
-        if "investment_performance" in final_obs:
-            perf = final_obs["investment_performance"]
-            print(f"\nFinal Performance:")
-            print(f"  Strategy Sharpe (net): {perf.get('strategy_sharpe_net', 0):.3f}")
-            print(f"  Strategy Sharpe (gross): {perf.get('strategy_sharpe_gross', 0):.3f}")
-            print(f"  Baseline Sharpe: {perf.get('baseline_sharpe', 0):.3f}")
-            if 'improvement' in perf:
-                print(f"  Improvement: {perf['improvement']:.3f}")
-        
-        # Save results to file
-        results_file = "evaluation_results.json"
-        with open(results_file, 'w') as f:
-            json.dump(episode_data, f, indent=2, default=str)
-        print(f"\nResults saved to: {results_file}")
-        
-        print("\nEvaluation complete!")
-        
-    except Exception as e:
-        print(f"Error during evaluation: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-if __name__ == "__main__":
-    main()
+    def create_mean_reversion_factor(self) -> Dict[str, Any]:
+        """Create a mean reversion factor combining momentum and reversal signals."""
+        return {
+            "nodes": [
+                {"id": "x0", "op": "rolling_return", "n": 126},
+                {"id": "x1", "op": "rolling_return", "n": 21},
+                {"id": "x2", "op": "sub", "a": "x0", "b": "x1"},
+                {"id": "x3", "op": "rolling_return", "n": 5},
+                {"id": "x4", "op": "ema", "n": 10, "src": "x3"},
+                {"id": "x5", "op": "sub", "a": "x3", "b": "x4"},
+                {"id": "x6", "op": "add", "a": "x2", "b": "x5"},
+                {"id": "x7", "op": "winsor_quantile", "src": "x6", "q": 0.02},
+                {"id": "score", "op": "zscore_xs", "src": "x7"}
+            ],
+            "output": "score"
+        }
