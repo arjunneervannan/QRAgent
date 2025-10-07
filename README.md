@@ -12,9 +12,8 @@ This implementation provides:
 
 ## Files
 
-- `agent_wrapper.py` - Clean wrapper for the Qwen agent with helper methods
+- `agent.py` - Simple Qwen agent wrapper with query method
 - `evaluation_loop.py` - Basic evaluation loop for running episodes
-- `example_usage.py` - Example script demonstrating usage
 - `requirements.txt` - Python dependencies
 - `README.md` - This file
 - `QRAgent_Env/` - The core reinforcement learning environment (unchanged)
@@ -43,14 +42,17 @@ Run the evaluation loop:
 python evaluation_loop.py
 ```
 
-### Using the Agent Wrapper
+### Using the Agent
 
 ```python
-from agent_wrapper import QwenFactorAgentWrapper
+from agent import QwenAgent
 from evaluation_loop import FactorEvaluationLoop
 
 # Initialize agent
-agent = QwenFactorAgentWrapper()
+agent = QwenAgent()
+
+# Query the agent with a custom prompt
+response = agent.query("What is a good momentum factor strategy?")
 
 # Initialize evaluation loop
 eval_loop = FactorEvaluationLoop()
@@ -60,14 +62,6 @@ episode_data = eval_loop.run_episode(agent)
 
 # Run multiple episodes
 all_episodes = eval_loop.run_multiple_episodes(agent, num_episodes=3)
-```
-
-### Example Usage
-
-Run the example script to see the agent in action:
-
-```bash
-python example_usage.py
 ```
 
 ## How It Works
