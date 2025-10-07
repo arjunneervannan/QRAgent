@@ -1,0 +1,134 @@
+from __future__ import annotations
+import json
+from typing import Dict, Any, Optional
+
+# System prompt that provides context about the agent's role and capabilities
+SYSTEM_PROMPT = """You are an expert quantitative researcher specializing in price-based factor momentum strategies.
+Your role is to build a factor model that can predict market timing across size and value factors.
+There are 25 assets, which are split into 5 size buckets and 5 value buckets. You have access to price data for the assets and nothing more.
+Your job is to generate price-based factor signals that can be used to predict the market timing of the size and value factors.
+
+CORE CAPABILITIES:
+- Analyze portfolio return data using statistical tools
+- Design factor models using a JSON-based Domain Specific Language (DSL)
+- Evaluate and improve factor performance through backtesting and edit factors
+
+Factor model specifications:
+- You have access to access to the following operations
+    - You can use the sub operation to create a factor signal from two other factor signals.
+    - You can use the windsor_quantile operation to create a factor signal from a price signal.
+    - You can use the zscore_xs operation to create a factor signal from a price signal.
+    - You can use the sub operation to create a factor signal from two other factor signals.
+    - You can use the windsor_quantile operation to create a factor signal from a price signal.
+    - You can use the zscore_xs operation to create a factor signal from a price signal.
+
+PERFORMANCE OBJECTIVES:
+- Maximize out-of-sample Sharpe ratio
+- Control turnover and transaction costs
+- Avoid data leakage and overfitting
+- Ensure factor signals are economically meaningful
+
+You have access to observation tools for data analysis and can propose complete factor programs. Your goal is to develop robust, profitable factor strategies through systematic analysis and iteration."""
+
+ACTION_SCHEMA = """
+Valid actions (emit exactly ONE JSON object per step):
+- OBSERVE:     {"type":"OBSERVE","tool":"<tool_name>","<params>":<values>}
+  Available tools:
+  - "describe_data": {"type":"OBSERVE","tool":"describe_data"}
+  - "plot_returns": {"type":"OBSERVE","tool":"plot_returns"}
+  - "analyze_factor_performance": {"type":"OBSERVE","tool":"analyze_factor_performance","factor_program":{...DSL JSON...}}
+- FACTOR_IMPROVE: {"type":"FACTOR_IMPROVE","new_program":{...DSL JSON...}}
+- STOP:        {"type":"STOP"}
+"""
+
+class PromptBuilder:
+    """Builder class for different types of prompts."""
+    
+    def __init__(self):
+        self.system_prompt = SYSTEM_PROMPT + "\n" + ACTION_SCHEMA
+    
+    def return_system_prompt(self) -> str:
+        return self.system_prompt
+
+    def build_basic_prompt(self, task_card: str, last_obs: Dict[str, Any]) -> str:
+        """Build a basic prompt that gives the agent options to OBSERVE or FACTOR_IMPROVE."""
+        
+        return f"""
+CURRENT STATE:
+- Budget remaining: {last_obs.get('budget_left', 0)}
+- Current program: {json.dumps(last_obs.get('current_program', {}), indent=2)}
+- Last evaluation: {json.dumps(last_obs.get('last_eval', {}), indent=2)}
+- Equal weight baseline: {json.dumps(last_obs.get('equal_weight_baseline', {}), indent=2)}
+- Current performance: {json.dumps(last_obs.get('current_performance', {}), indent=2)}
+
+Think about what would be most helpful given the current state. Consider:
+- Do you need more information about the data or current factor?
+- Can you propose a better factor program?
+- Are you ready to end the episode for evaluation?
+
+Output ONE JSON action with no extra text.
+Action JSON:
+"""
+
+    def build_observation_prompt(self, tool: str, result: Any, context: Dict[str, Any]) -> str:
+        """Build a prompt after an observation tool has been executed."""
+        return f"""You just executed the {tool} tool and received the following result:
+
+{json.dumps(result, indent=2)}
+
+CONTEXT:
+- Budget remaining: {context.get('budget_left', 0)}
+- Current program: {json.dumps(context.get('current_program', {}), indent=2)}
+- Episode rewards: {context.get('episode_rewards', [])}
+
+Based on this observation, what would you like to do next?
+
+Output ONE JSON action with no extra text.
+Action JSON:
+"""
+
+    def build_improvement_prompt(self, improvement_result: Dict[str, Any], context: Dict[str, Any]) -> str:
+        """Build a prompt after a factor improvement has been made."""
+        return f"""
+You just edited the factor and received the following results:
+
+IMPROVEMENT RESULTS:
+- In-sample Sharpe: {improvement_result.get('sharpe_net', 0):.3f}
+- Improvement: {improvement_result.get('improvement', 0):.3f}
+- Incremental reward: {improvement_result.get('incremental_reward', 0):.3f}
+- Turnover: {improvement_result.get('avg_turnover', 0):.3f}
+- Tests pass: {improvement_result.get('tests_pass', False)}
+
+CONTEXT:
+- Budget remaining: {context.get('budget_left', 0)}
+- Episode rewards: {context.get('episode_rewards', [])}
+- Incremental rewards: {context.get('incremental_rewards', [])}
+
+Current program: {json.dumps(context.get('current_program', {}), indent=2)}
+
+Based on these results, what would you like to do next?
+
+{self.action_schema}
+
+Output ONE JSON action with no extra text.
+Action JSON:
+"""
+
+    def build_final_evaluation_prompt(self, eval_result: Dict[str, Any], context: Dict[str, Any]) -> str:
+        """Build a prompt after the final evaluation has been completed (for reflection only)."""
+        return f"""
+        The episode has concluded with the following final evaluation results:
+
+FINAL EVALUATION RESULTS:
+- OOS Sharpe: {eval_result.get('oos_sharpe', 0):.3f}
+- Turnover: {eval_result.get('turnover', 0):.3f}
+- Tests pass: {eval_result.get('tests_pass', False)}
+- Leakage detected: {eval_result.get('leak', False)}
+
+EPISODE SUMMARY:
+- Total episode rewards: {context.get('episode_rewards', [])}
+- Incremental rewards: {context.get('incremental_rewards', [])}
+- Final OOS Sharpe: {eval_result.get('oos_sharpe', 0):.3f}
+
+This episode is complete. The evaluation was performed automatically when you chose to STOP.
+"""
